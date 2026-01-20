@@ -60,6 +60,14 @@ import pypsa
 import xarray as xr
 from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_uniform
 
+# Per fare debug su VSCode
+# Ensure repo root on sys.path
+import sys
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]  # points to /dati/pampado/pypsa-eur
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from scripts._helpers import (
     PYPSA_V1,
     configure_logging,
@@ -556,7 +564,7 @@ def attach_conventional_generators(
     if unit_commitment is not None:
         committable_attrs = ppl.carrier.isin(unit_commitment).to_frame("committable")
         for attr in unit_commitment.index:
-            default = n.component_attrs["Generator"].loc[attr, "default"]
+            default = n.components.generators.defaults.loc[attr, "default"]
             committable_attrs[attr] = ppl.carrier.map(unit_commitment.loc[attr]).fillna(
                 default
             )
@@ -1042,12 +1050,112 @@ def attach_stores(
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
+def add_modularity(n, modularity_cfg, logger=print):
+    """
+    Apply modular capacity sizes (p_nom_mod / s_nom_mod / e_nom_mod)
+    to PyPSA components based on a 'modularity' configuration dict.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        PyPSA network.
+    modularity_cfg : dict
+        Configuration dictionary, typically:
+        snakemake.params.electricity["modularity"]
+        Example:
+        {
+            "enable": True,
+            "p_nom_mod": {
+                "line": {"AC": 500},
+                "link": {"DC": 500},
+                "generator": {"CCGT": 400}
+            }
+        }
+    logger : callable, optional
+        Logging function, default is `print`.
+    """
+
+    if not modularity_cfg.get("enable", False):
+        logger("Modularity disabled; skipping add_modularity.")
+        return
+
+    # Map from config component key -> (network table name, capacity attribute)
+    component_table_map = {
+        "generator": ("generators", "p_nom_mod"),
+        "link": ("links", "p_nom_mod"),
+        "storage_unit": ("storage_units", "p_nom_mod"),
+        "line": ("lines", "s_nom_mod"),
+        "transformer": ("transformers", "s_nom_mod"),
+        "store": ("stores", "e_nom_mod"),
+    }
+
+    for generic_attr, comp_cfg in modularity_cfg.items():
+        # We treat keys like "p_nom_mod", "s_nom_mod", "e_nom_mod" at this level
+        # as generic: the actual attribute is determined by the component type.
+        if generic_attr == "enable":
+            continue
+
+        if not isinstance(comp_cfg, dict):
+            logger(f"Skipping modularity entry '{generic_attr}' (not a dict).")
+            continue
+
+        for comp_key, tech_dict in comp_cfg.items():
+            if comp_key not in component_table_map:
+                logger(f"Component '{comp_key}' not supported in modularity config; skipping.")
+                continue
+
+            table_name, cap_attr = component_table_map[comp_key]
+
+            if not hasattr(n, table_name):
+                logger(f"Network has no table '{table_name}' for component '{comp_key}'; skipping.")
+                continue
+
+            df = getattr(n, table_name)
+
+            if not isinstance(tech_dict, dict):
+                logger(f"Expected dict for '{comp_key}' in modularity config; got {type(tech_dict)}.")
+                continue
+
+            # Ensure the *_nom_mod column exists
+            if cap_attr not in df.columns:
+                df[cap_attr] = np.nan
+
+            for tech_name, step_value in tech_dict.items():
+                # Choose matching column: prefer "carrier", fallback to "type"
+                if "carrier" in df.columns:
+                    mask = df["carrier"] == tech_name
+                    match_col = "carrier"
+                elif "type" in df.columns:
+                    mask = df["type"] == tech_name
+                    match_col = "type"
+                else:
+                    logger(
+                        f"Neither 'carrier' nor 'type' column in '{table_name}' "
+                        f"to match technology '{tech_name}'; skipping."
+                    )
+                    continue
+
+                if not mask.any():
+                    logger(
+                        f"No rows in '{table_name}' with {match_col} == '{tech_name}' "
+                        f"for component '{comp_key}'."
+                    )
+                    continue
+
+                df.loc[mask, cap_attr] = step_value
+                logger(
+                    f"Set {cap_attr} = {step_value} for {mask.sum()} "
+                    f"entries in '{table_name}' with {match_col} == '{tech_name}'."
+                )
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_electricity", clusters=100)
+        snakemake = mock_snakemake("add_electricity",
+                                    clusters='adm',
+                                    configfiles=['config/davide_test/config.yaml'],
+                                    run='__uc_2019')
     configure_logging(snakemake)  # pylint: disable=E0606
     set_scenario_config(snakemake)
 
@@ -1166,6 +1274,11 @@ if __name__ == "__main__":
 
     attach_storageunits(n, costs, extendable_carriers, max_hours)
     attach_stores(n, costs, extendable_carriers)
+
+    add_modularity(
+        n,
+        modularity_cfg=params.electricity['modularity'],
+    )
 
     sanitize_carriers(n, snakemake.config)
     if "location" in n.buses:

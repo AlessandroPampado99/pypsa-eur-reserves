@@ -44,6 +44,14 @@ from linopy.remote.oetc import OetcCredentials, OetcHandler, OetcSettings
 from pypsa.descriptors import get_activity_mask
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
 
+# Per fare debug su VSCode
+# Ensure repo root on sys.path
+import sys
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]  # points to /dati/pampado/pypsa-eur
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from scripts._benchmark import memory_logger
 from scripts._helpers import (
     PYPSA_V1,
@@ -1403,12 +1411,13 @@ if __name__ == "__main__":
         from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_sector_network",
+            "solve_network",
             opts="",
-            clusters="5",
-            configfiles="config/test/config.overnight.yaml",
+            clusters="adm",
+            configfiles="config/davide_test/config.yaml",
+            run="__uc_2019",
             sector_opts="",
-            planning_horizons="2030",
+            planning_horizons="2020",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
