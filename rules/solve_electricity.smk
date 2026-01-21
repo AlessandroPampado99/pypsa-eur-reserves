@@ -13,6 +13,9 @@ rule solve_network:
         custom_extra_functionality=input_custom_extra_functionality,
     input:
         network=resources("networks/base_s_{clusters}_elec_{opts}.nc"),
+        reserve_contrib="data/reserves/contribution.csv",
+        reserve_coeff_up="data/reserves/coeff_up.pkl",
+        reserve_coeff_dw="data/reserves/coeff_dw.pkl",
     output:
         network=RESULTS + "networks/base_s_{clusters}_elec_{opts}.nc",
         config=RESULTS + "configs/config.base_s_{clusters}_elec_{opts}.yaml",
