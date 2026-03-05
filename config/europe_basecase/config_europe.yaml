@@ -41,7 +41,7 @@ scenario:
   sector_opts:
   - ''
   planning_horizons:
-  - 2050
+  - 2040
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#countries
 countries:
@@ -927,7 +927,7 @@ industry:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#costs
 costs:
-  year: 2020
+  year: 2040
   version: v0.13.3
   social_discountrate: 0.02
   fill_values:

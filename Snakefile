@@ -62,6 +62,7 @@ include: "rules/build_sector.smk"
 include: "rules/solve_electricity.smk"
 include: "rules/postprocess.smk"
 include: "rules/development.smk"
+include: "rules/postprocess_electricity_only.smk"
 
 
 if config["foresight"] == "overnight":
@@ -375,3 +376,64 @@ rule sync_dry:
         rsync -uvarh --no-g {params.cluster}/results . -n || echo "No results directory, skipping rsync"
         rsync -uvarh --no-g {params.cluster}/logs . -n || echo "No logs directory, skipping rsync"
         """
+
+rule all_electric:
+    input:
+        # 1) solved electricity networks (whatever solve_elec_networks already collects)
+        rules.solve_elec_networks.input,
+
+        # 2) base maps (già nel tuo postprocess, safe)
+        expand(resources("maps/power-network.pdf"), run=config["run"]["name"]),
+        expand(
+            resources("maps/power-network-s-{clusters}.pdf"),
+            run=config["run"]["name"],
+            **config["scenario"],
+        ),
+
+        # 3) electricity-only postprocess targets (sector_opts forced to elec_only)
+        expand(
+            RESULTS
+            + "maps/static/base_s_{clusters}_{opts}_{sector_opts}-costs-all_{planning_horizons}.pdf",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+        expand(
+            RESULTS
+            + "graphics/balance_timeseries/s_{clusters}_{opts}_{sector_opts}_{planning_horizons}",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+        expand(
+            RESULTS
+            + "graphics/heatmap_timeseries/s_{clusters}_{opts}_{sector_opts}_{planning_horizons}",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+        expand(
+            RESULTS
+            + "graphics/interactive_bus_balance/s_{clusters}_{opts}_{sector_opts}_{planning_horizons}",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+
+        # 4) balance maps ONLY for AC (static + interactive)
+        expand(
+            RESULTS
+            + "maps/static/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-balance_map_AC.pdf",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+        expand(
+            RESULTS
+            + "maps/interactive/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-balance_map_AC.html",
+            run=config["run"]["name"],
+            **ELECTRIC_SCENARIO,
+        ),
+
+        # 5) already-electric statistics plots trigger
+        expand(
+            RESULTS + "figures/.statistics_plots_base_s_{clusters}_elec_{opts}",
+            run=config["run"]["name"],
+            **config["scenario"],
+        ),
+    default_target: False
