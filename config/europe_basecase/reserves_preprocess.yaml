@@ -1,0 +1,70 @@
+# Which renewable generators to include as "available power" columns (MW).
+# Keep only what you want to reduce columns:
+availability_groups:
+  - name: Solar_avail
+    carriers: ["solar", "solar-hsat"]
+  - name: Onwind_avail
+    carriers: ["onwind"]
+  - name: Offwind_avail
+    carriers: ["offwind-ac"]   # you asked to keep only one offwind type
+
+# Float vars in Sobol (if omitted -> auto = availability groups + Load + Ramp)
+float_vars: null
+
+# Which availability vars go into RD and thus Ramp (if null -> all availability groups)
+rd_availability_vars: null
+
+# Capacity aggregation for modular vars
+include_components: ["generators", "storage_units", "stores"]
+include_links: true
+exclude_link_carriers: ["battery charger"]
+
+# If you want stores to contribute to MW envelopes, you MUST provide a duration (hours):
+# P_proxy = E_nom / hours. If null and no per-group override -> stores ignored for MW envelopes.
+default_store_power_hours: null
+store_power_hours_by_group: {}
+
+# Carrier->group mapping for modularization (regex)
+group_patterns:
+  - {pattern: "^battery discharger$", group: "liion"}   # SOLO discharger
+  - {pattern: "\\bCCGT\\b", group: "gas_ccgt"}
+  - {pattern: "\\bOCGT\\b", group: "gas_ocgt"}
+  - {pattern: "oil|diesel", group: "diesel"}
+  - {pattern: "coal", group: "coal"}
+  - {pattern: "lignite", group: "lignite"}
+  - {pattern: "nuclear", group: "nuclear"}
+  - {pattern: "biomass", group: "biomass"}
+  - {pattern: "hydro|PHS|reservoir", group: "hydro"}
+
+# Envelopes
+margin_non_res: 0.10
+margin_by_group: {}
+
+# Module sizes (fallback if you don't pass --module-sizes)
+p_module_by_group:
+  diesel: 155
+  gas_ccgt: 55
+  gas_ocgt: 55
+  coal: 195
+  lignite: 195
+  nuclear: 930
+  hydro: 175
+  liion: 100
+default_p_module_mw: 100
+
+# Keep MC feasible
+n_max_cap: 500
+
+# Defaults for future MC
+default_prob_trip_per_min: 0.0
+prob_trip_by_group: {}
+
+default_std_dev_rel: 0.0
+std_dev_rel_by_var:
+  Load: 0.0
+  Ramp: 0.0
+  Solar_avail: 0.0
+  Onwind_avail: 0.0
+  Offwind_avail: 0.0
+
+write_timeseries: true
